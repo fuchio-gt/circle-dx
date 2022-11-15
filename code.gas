@@ -1,0 +1,108 @@
+function myFunction() {
+  // 保存先のフォルダの指定
+  const folder = DriveApp.getFolderById("FolderId");
+
+  // サークル活動届の回答のスプレッドシートを開く
+  const spreadsheet = SpreadsheetApp.openById("SpreadsheetId");
+  const sheet = spreadsheet.getActiveSheet();
+  const lastRow = sheet.getLastRow();
+
+  // 活動日
+  const activityDate = Utilities.formatDate(sheet.getRange(lastRow, 2).getValue(), "Asia/Tokyo", "Y年M月d日");
+
+  // 活動時間
+  const activityTimeArray = sheet.getRange(lastRow, 3).getValue().split(",");
+  if (activityTimeArray.length != 1) {
+    const start = activityTimeArray[0].substring(0, activityTimeArray[0].indexOf("-"));
+    const end = activityTimeArray[activityTimeArray.length-1].substring(activityTimeArray[activityTimeArray.length-1].indexOf("-"));
+    var activityTime = start + end;
+  }
+  else {
+    var activityTime = sheet.getRange(lastRow, 3).getValue();
+  }
+
+  // 利用する学生
+  const participants = sheet.getRange(lastRow, 4, lastRow, 8).getValues()[0].filter(Boolean);
+  const participantsArray = [];
+  for (let i in participants) {
+    participantsArray.push(participants[i].split(/[@＠]/)); // [[学年, 名前], [学年, 名前], ...]の二次元配列にする
+  }
+
+  // サークル活動届の原本を取得
+  const originalDoc = DriveApp.getFileById("OriginalDocId");
+
+  // 年度(和暦)
+  const replaceNameYear = (sheet.getRange(lastRow, 2).getValue().getFullYear() - new Date(2019,4,1).getFullYear())+1;
+  // 月日
+  const replaceNameDate = Utilities.formatDate(sheet.getRange(lastRow, 2).getValue(), "Asia/Tokyo", "MM-dd");
+  // 活動時間から何講目かを算出
+  if (activityTime.match(/^8:50-/)){
+    var replaceNameTime = 1;
+  }
+  else if (activityTime.match(/^10:30/)){
+    var replaceNameTime = 2;
+  }
+  else if (activityTime.match(/^12:00/)){
+    var replaceNameTime = "L";
+  }
+  else if (activityTime.match(/^12:50/)){
+    var replaceNameTime = 3;
+  }
+  else if (activityTime.match(/^14:30/)){
+    var replaceNameTime = 4;
+  }
+  else if (activityTime.match(/^16:00/)){
+    var replaceNameTime = 5;
+  }
+  else if (activityTime.match(/^17:45/)){
+    var replaceNameTime = 6;
+  }
+  else if (activityTime.match(/^19:25/)){
+    var replaceNameTime = 7;
+  }
+
+  // 原本のコピーを作成
+  const copyFile = originalDoc.makeCopy(originalDoc.getName().replace("原本", `R${replaceNameYear}-${replaceNameDate}-${replaceNameTime}`), folder);
+
+  // 原本のコピーを開く
+  const doc = DocumentApp.openById(copyFile.getId());
+
+  // テーブルを取得
+  const tables = doc.getBody().getTables();
+
+  // テーブルごとに処理
+  for (let i in tables) {
+    const rowIndex = tables[i].getNumRows(); // 行数を取得
+
+    // 行ごとに処理
+    for (let j = 0; j < rowIndex; j++) {
+      const row = tables[i].getRow(j); // 行を取得
+      const cellIndex = row.getNumCells(); // セル数を取得
+
+      // セルごとに処理する
+      for (let k = 0; k < cellIndex; k++) {
+        const text = row.getCell(k).getText(); // セルからテキストを取得
+        Logger.log(`${text}, ${i}, ${j}, ${k}`);
+
+        // 活動日を記入する
+        if (i==0 && j==6 && k==3) {
+          row.getCell(k).setText(activityDate);
+        }
+      }
+      
+      // 利用する学生を記入する
+      participantsArray.forEach((participant, index) => {
+        if (i==0 && j==index+9){
+          Logger.log(`利用する学生を記入するときのj: ${j}`);
+          // 学年
+          row.getCell(1).setText(participant[0]);
+          // 氏名
+          row.getCell(2).setText(participant[1]);
+        }
+      })
+
+    }
+
+  }
+
+}
